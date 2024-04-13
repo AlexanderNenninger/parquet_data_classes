@@ -75,7 +75,7 @@ class MetaData:
 class DataSet:
     """Custom Dataset that saves metadata within a parquet file as utf-8 encoded json.
     """
-    metadata: MetaData
+    metadata: Optional[MetaData]
     dataframe: pl.DataFrame
     _class_id: ClassVar[str] = "__python__/my_namespace/DataSet"
 
@@ -94,7 +94,7 @@ class DataSet:
         assert_frame_equal(self.dataframe, other.dataframe, **kwargs)
 
     def write_parquet(self, file: Any, **kwargs):
-        """Dump self to parquet.
+        """Serialize DataSet to parquet.
 
         Args:
             file (Any): Any file location that can be handled by `pyarrow.parquet.write_table`.
