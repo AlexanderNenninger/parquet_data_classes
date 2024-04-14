@@ -1,0 +1,2 @@
+*.parquet binary merge=ours
+*.parquet filter=lfs diff=lfs merge=lfs -text
