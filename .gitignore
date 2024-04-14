@@ -5,3 +5,5 @@
 !.gitattributes
 !jobs.parquet
 !environment.yml
+!.vscode
+!README.md
