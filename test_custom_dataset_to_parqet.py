@@ -1,9 +1,10 @@
-import warnings
 from math import inf, nan
 
 import polars as pl
 import polars.testing
+import polars.testing.parametric
 import pytest
+from hypothesis import given
 
 from custom_dataset_to_parquet import ConversionWarning, DataSet, MetaData
 
@@ -47,20 +48,32 @@ def dataset(metadata, dataframe):
 
 
 def test_write_read_without_partitioning(dataset, tmp_path):
-    dataset.write_parquet(tmp_path / "no-partition.parquet")
-    deserialized = DataSet.read_parquet(tmp_path / "no-partition.parquet")
-    dataset.assert_eq(deserialized)
+    with pytest.warns(ConversionWarning):
+        dataset.write_parquet(tmp_path / "no-partition.parquet")
+        deserialized = DataSet.read_parquet(tmp_path / "no-partition.parquet")
+        dataset.assert_eq(deserialized, check_dtype=False)
+        # Changed dtype.
+        assert deserialized.dataframe["lexical_partition"].dtype.is_(
+            pl.Categorical("physical")
+        ), f"{deserialized.dataframe["lexical_partition"].dtype}"
+        pl.testing.assert_frame_equal(
+            dataset.dataframe.select(pl.exclude("lexical_partition")),
+            deserialized.dataframe.select(pl.exclude("lexical_partition")),
+        )
 
 
 def test_write_read_with_partitioning(dataset, tmp_path):
     # No warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
+    with pytest.warns(ConversionWarning):
         dataset.write_parquet(
             tmp_path / "partition_no_warning", partition_cols=["partition"]
         )
         deserialized = DataSet.read_parquet(tmp_path / "partition_no_warning")
-        dataset.assert_eq(deserialized, check_column_order=False)
+        dataset.assert_eq(deserialized, check_column_order=False, check_dtype=False)
+        # Changed dtype
+        assert deserialized.dataframe["lexical_partition"].dtype.is_(
+            pl.Categorical("physical")
+        ), f"{deserialized.dataframe["lexical_partition"].dtype}"
 
 
 def test_lexical_partition(dataset, tmp_path):
@@ -107,3 +120,13 @@ def test_int_partition(dataset, tmp_path):
             check_column_order=False,
             check_dtype=False,
         )
+
+
+@given(
+    polars.testing.parametric.dataframes(
+        cols=100, size=100, allowed_dtypes=pl.FLOAT_DTYPES | pl.DATETIME_DTYPES
+    ),
+    include_cols=[pl.Categorical("physical")],
+)
+def large_dataset(df: pl.DataFrame):
+    print(df)

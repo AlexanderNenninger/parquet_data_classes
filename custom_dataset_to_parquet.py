@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, field, is_dataclass
 from math import inf, nan
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, Dict, Optional
 from warnings import warn
 
 import polars as pl
@@ -69,13 +69,14 @@ class MyJSONDecoder(json.JSONDecoder):
         return dct
 
 
-@dataclass(frozen=True)
+@dataclass
 class MetaData:
     """Some dataclass for testing."""
 
     foo: str = "Foo"
     bar: float = inf
     baz: Optional[int] = None
+    units: Dict[str, str] = field(default_factory=dict)
 
     def assert_eq(self, other):
         assert self == other, f"{self=}, {other=}"
@@ -121,15 +122,24 @@ class DataSet:
             **existing_metadata,
         }
         table = table.replace_schema_metadata(new_metadata)
+
+        # Categorical columns with lexical ordering will be mapped to Categorical(ordering="physical")
+        for col in self.dataframe:
+            if col.dtype.is_(pl.Categorical("lexical")):
+                warn(
+                    f"Column {col.name} with dtype {col.dtype} will be converted to {pl.Categorical("physical")}",
+                    ConversionWarning,
+                )
+
         # Write table to parquet.
-        if partion_cols := kwargs.get("partition_cols"):
+        if partition_cols := kwargs.get("partition_cols"):
             # All partition columns will be cast to `Categorical(ordering="physical")`.
-            for partion_col in partion_cols:
+            for partion_col in partition_cols:
                 if not self.dataframe[partion_col].dtype.is_(
                     pl.Categorical("physical")
                 ):
                     warn(
-                        f"Column {partion_col} of dtype={self.dataframe[partion_col].dtype}"
+                        f"Column {partion_col} of dtype {self.dataframe[partion_col].dtype}"
                         f"will be converted to {pl.Categorical("physical")}.",
                         ConversionWarning,
                     )
