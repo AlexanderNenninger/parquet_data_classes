@@ -85,3 +85,5 @@ finally:
     # Remove this if you want to inspect the data on disk.
     shutil.rmtree("./tmp", ignore_errors=True)
 ```
+
+You can find addtional usage examples, tests of edge-cases and performance benchmark code in `./test_custom_dataset_to_parqet.py`.
