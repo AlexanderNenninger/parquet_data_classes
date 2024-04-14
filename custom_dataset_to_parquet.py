@@ -14,7 +14,9 @@ from polars.testing import assert_frame_equal
 class ConversionWarning(Warning):
     """Warns if Serialization and Deserialization will change data types."""
 
-    pass
+
+class SerializationError(Exception):
+    """Indicates impossible serialization"""
 
 
 class MyJSONEncoder(json.JSONEncoder):
@@ -36,7 +38,7 @@ class MyJSONEncoder(json.JSONEncoder):
     def default(self, o):
         if is_dataclass(o):
             return {f"__python__/dataclasses/{o.__class__.__name__}": vars(o)}
-        return super.default(o)
+        return super().default(o)
 
 
 class MyJSONDecoder(json.JSONDecoder):
@@ -76,7 +78,7 @@ class MetaData:
     foo: str = "Foo"
     bar: float = inf
     baz: Optional[int] = None
-    units: Dict[str, str] = field(default_factory=dict)
+    description: Dict[str, str] = field(default_factory=dict)
 
     def assert_eq(self, other):
         assert self == other, f"{self=}, {other=}"
@@ -107,6 +109,13 @@ class DataSet:
     def write_parquet(self, location: Any, **kwargs):
         """Serialize DataSet to parquet.
 
+        *Note*: Columns of type `pl.Categorical` are cast to `pl.Categorical(ordering="physical")`.
+
+        *Note*: If `partition_columns` are given, both column order and row order are not invariant.
+
+        *Note*: Columns given by the arg `partition_columns` will be cast to
+        `pl.Categorical(ordering="physical")`.
+
         Args:
             file (Any): Any file location that can be handled by `pyarrow.parquet.write_table`.
             **kwargs  : Will be passed on to `pyarrow.parquet.write_table`.
@@ -135,6 +144,11 @@ class DataSet:
         if partition_cols := kwargs.get("partition_cols"):
             # All partition columns will be cast to `Categorical(ordering="physical")`.
             for partion_col in partition_cols:
+                if self.dataframe[partion_col].is_null().any():
+                    raise SerializationError(
+                        f"Cannot partition on column containing null values. {partion_col=}"
+                    )
+
                 if not self.dataframe[partion_col].dtype.is_(
                     pl.Categorical("physical")
                 ):

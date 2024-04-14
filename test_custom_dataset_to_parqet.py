@@ -1,4 +1,7 @@
+import io
+import shutil
 from math import inf, nan
+from pathlib import Path
 
 import polars as pl
 import polars.testing
@@ -7,6 +10,8 @@ import pytest
 from hypothesis import given
 
 from custom_dataset_to_parquet import ConversionWarning, DataSet, MetaData
+
+pl.enable_string_cache()
 
 
 @pytest.fixture()
@@ -122,11 +127,80 @@ def test_int_partition(dataset, tmp_path):
         )
 
 
-@given(
-    polars.testing.parametric.dataframes(
-        cols=100, size=100, allowed_dtypes=pl.FLOAT_DTYPES | pl.DATETIME_DTYPES
-    ),
-    include_cols=[pl.Categorical("physical")],
-)
-def large_dataset(df: pl.DataFrame):
-    print(df)
+@given(polars.testing.parametric.dataframes(max_size=100, null_probability=0.1))
+def test_property(dataframe: pl.DataFrame):
+    dataset = DataSet(MetaData(), dataframe)
+    with io.BytesIO() as bio:
+        dataset.write_parquet(bio)
+        deserialized = DataSet.read_parquet(bio)
+    deserialized.assert_eq(
+        dataset,
+        check_dtype=False,
+    )
+
+
+@pytest.fixture
+def datafile():
+    return "jobs.parquet"
+
+
+@pytest.fixture
+def benchmark_dataframe(datafile):
+    return pl.read_parquet(datafile).drop_nulls(["WindowID", "Country", "State"])
+
+
+@pytest.fixture
+def benchmark_metadata(datafile):
+    schema = pl.read_parquet_schema(datafile)
+    descriptions = {
+        k: "Lorem ipsum dolor sit amet, consectetuer adipiscing elit. "
+        "Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et "
+        for k in schema
+    }
+    return MetaData(description=descriptions)
+
+
+@pytest.fixture
+def benchmark_dataset(benchmark_dataframe, benchmark_metadata):
+    return DataSet(dataframe=benchmark_dataframe, metadata=benchmark_metadata)
+
+
+@pytest.fixture
+def benchmark_path():
+    p = Path("./data/benchmark")
+    p.mkdir(exist_ok=True, parents=True)
+    yield p
+    shutil.rmtree(p, ignore_errors=True)
+
+
+@pytest.fixture
+def deser_dataset_path(benchmark_dataset, benchmark_path):
+    p = benchmark_path / "deser.parquet"
+    benchmark_dataset.write_parquet(
+        p,
+    )
+    return str(p)
+
+
+@pytest.fixture
+def deser_partitioned_dataset_path(benchmark_dataset, benchmark_path):
+    p = benchmark_path / "partitioned/deser"
+    benchmark_dataset.write_parquet(p, partition_cols=["WindowID", "Country"])
+    return str(p)
+
+
+def test_benchmark_serialization(benchmark_dataset, benchmark, benchmark_path):
+    _ = benchmark(
+        benchmark_dataset.write_parquet,
+        str(benchmark_path / "benchmark_serialization.parquet"),
+    )
+
+
+def test_benchmark_deserialization(benchmark, deser_dataset_path):
+    _ = benchmark(DataSet.read_parquet, deser_dataset_path)
+
+
+def test_benchmark_deserialization_partitioned(
+    benchmark, deser_partitioned_dataset_path
+):
+    _ = benchmark(DataSet.read_parquet, deser_partitioned_dataset_path)
