@@ -239,4 +239,3 @@ if __name__ == "__main__":
         raise e
     finally:
         shutil.rmtree("./data", ignore_errors=True)
-        shutil.rmtree("./data", ignore_errors=True)
