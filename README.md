@@ -1,14 +1,14 @@
 # Map Custom Datasets to Parquet and Back
 
-Currently there seems to be no elegant solution for serializing custom metadata in dataframe serialization formats that play nicely with data warehouse engines like Apache Spark, Hive, etc. and dataframe libraries like Pandas, polars, and apache Arrow.
+Currently there seems to be no elegant solution for serializing custom metadata in dataframe serialization formats that play nicely with the Python type system, data warehouse engines like Apache Spark, Hive, etc. and dataframe libraries like Pandas, polars, and apache Arrow.
 
-An concrete use case for this could be storing unit information, frequency data, orientation, etc. along with timeseries. This can of course be stored in aditional metdadata files, but I found this to be error-prone and messy.
+A concrete use case for this could be storing unit information, frequency data, orientation, etc. along with timeseries. This can of course be stored in aditional metdadata files, but I found this to be error-prone and messy.
 
 Thankfully the metadata of Apache Parquet can contain arbitrary key-value pairs ([source](https://parquet.apache.org/docs/file-format/metadata/)). The technique demonstrated in this repo is as as follows:
 
  1. Store all metadata along with the dataframe in a container object. This can be a dataclass, or we inherit from a metaclass defining an interface for metadata and tabular data, and that implements the serialization functionality.
 
- 2. Serialize all custom data as JSON and encode the resulting string using UTF-8. Using JSON here instead of e.g. pickle enables easy deserialization within other environments, since both JSON and UTF-8 are widely supported across programming languages.
+ 2. Serialize metadata as JSON and encode the resulting string using UTF-8. Using JSON here instead of e.g. pickle enables easy deserialization within other environments, since both JSON and UTF-8 are widely supported across programming languages. There are pitfalls w.r.t. numeric datatypes, so I might iterare in this. 
 
  3. Write the resulting bitstring into the key-value metadata under a user-defined key.
 
