@@ -4,10 +4,17 @@ import json
 from dataclasses import dataclass, is_dataclass
 from math import inf, nan
 from typing import Any, ClassVar, Optional
+from warnings import warn
 
 import polars as pl
 import pyarrow.parquet as pq
 from polars.testing import assert_frame_equal
+
+
+class ConversionWarning(Warning):
+    """Warns if Serialization and Deserialization will change data types."""
+
+    pass
 
 
 class MyJSONEncoder(json.JSONEncoder):
@@ -115,7 +122,17 @@ class DataSet:
         }
         table = table.replace_schema_metadata(new_metadata)
         # Write table to parquet.
-        if kwargs.get("partition_cols"):
+        if partion_cols := kwargs.get("partition_cols"):
+            # All partition columns will be cast to `Categorical(ordering="physical")`.
+            for partion_col in partion_cols:
+                if not self.dataframe[partion_col].dtype.is_(
+                    pl.Categorical("physical")
+                ):
+                    warn(
+                        f"Column {partion_col} of dtype={self.dataframe[partion_col].dtype}"
+                        f"will be converted to {pl.Categorical("physical")}.",
+                        ConversionWarning,
+                    )
             pq.write_to_dataset(table=table, root_path=location, **kwargs)
         else:
             pq.write_table(table=table, where=location, **kwargs)
@@ -197,4 +214,5 @@ if __name__ == "__main__":
     except Exception as e:
         raise e
     finally:
+        shutil.rmtree("./data", ignore_errors=True)
         shutil.rmtree("./data", ignore_errors=True)
